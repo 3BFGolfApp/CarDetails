@@ -52,15 +52,17 @@ a{color:var(--accent)}
 .gear svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 .optic{font-size:1.3rem;width:28px;text-align:center}
 label.opt{cursor:pointer}
-.plates{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 20px)/3);gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none}
+.plates{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 20px)/3);gap:10px;overflow-x:auto;padding:7px 6px 4px;margin:0 -6px 14px;scrollbar-width:none}
 .plate{min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:0}
 .plate .reg{display:block;width:100%;border-radius:8px;line-height:0}
 .plate-svg{display:block;width:100%;height:auto}
 .pbg{fill:var(--plate);stroke:#111;stroke-width:3}
 .plate .nm{font-size:.9rem;color:var(--muted);font-weight:600}
-.plate[aria-pressed="false"] .reg{opacity:.5}
-.plate[aria-pressed="false"] .pbg{fill:var(--plate-front)}
-.plates .plate[aria-pressed="true"] .reg{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--fg)}
+.plates[data-sel="one"] .plate[aria-pressed="false"] .reg{opacity:.5}
+.plates[data-sel="one"] .plate[aria-pressed="false"] .pbg{fill:var(--plate-front)}
+.plate[aria-pressed="true"] .reg{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--fg)}
+.choose{padding:36px 16px;text-align:center;display:grid;gap:8px;justify-items:center}
+.choose .arrow{font-size:2rem;line-height:1;color:var(--muted)}
 .plate .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:1px}
 .plate.add .addreg{line-height:1;font-family:var(--display);font-weight:700;font-size:1.4rem;padding:6px 0;text-align:center;background:transparent;color:var(--muted);box-shadow:inset 0 0 0 2px var(--line);opacity:1}
 
@@ -423,7 +425,6 @@ const MS = 86400000;
 const CATS = ["Fuel","Insurance","Tax","MOT","Service & repairs","Breakdown","Parking & tolls","Other"];
 
 const state = { accidents: [], accEditId: null, accRev: 0, highlight: null, cars: [], costs: [], carId: null, tab: "summary", helpOpen: "breakdown", costRange: "12m", db: null, assets: null, confirmDel: null, loaded: false, offline: false };
-try { const c = localStorage.getItem("cs.car"); if (c) state.carId = c; } catch(e){}
 
 /* ---------- dates ---------- */
 function todayLocal(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
@@ -536,7 +537,7 @@ function car(){ return state.cars.find(c=>c.id===state.carId) || state.cars[0]; 
 
 function platesHTML(opt={}){
   const dotColor = {ok:"var(--tl-green)",soon:"var(--tl-yellow)",warn:"var(--tl-amber)",bad:"var(--tl-red)"};
-  return state.cars.map(c => `<button class="plate" data-car="${esc(c.id)}" aria-pressed="${opt.allOn?"true":c.id===car().id}">
+  return state.cars.map(c => `<button class="plate" data-car="${esc(c.id)}" aria-pressed="${c.id===state.carId}">
       <span class="reg">${plateSVG(plate(c.reg))}</span>
       <span class="nm"><span class="dot" style="background:${dotColor[carLevel(c)]}"></span>${esc(c.name)}</span></button>`).join("")
     + (state.db && !opt.noAdd ? `<button class="plate add" data-act="addcar" aria-label="Add a car"><span class="reg addreg">+</span><span class="nm">Add car</span></button>` : "");
@@ -544,6 +545,7 @@ function platesHTML(opt={}){
 function renderPlates(){
   const el = $("#plates");
   el.hidden = state.tab==="summary" || !state.cars.length;
+  el.dataset.sel = state.carId ? "one" : "none";
   el.innerHTML = el.hidden ? "" : platesHTML();
 }
 
@@ -565,6 +567,11 @@ function render(){
   }
   const views = {summary:viewSummary, dates:viewDates, contacts:viewContacts, accident:viewAccident, breakdown:viewBreakdown};
   if (!views[state.tab]) state.tab = "summary";
+  if (state.tab!=="summary" && !state.cars.some(c=>c.id===state.carId)){
+    v.dataset.key = "";
+    v.innerHTML = `<div class="choose"><div class="arrow">↑</div><h2>Choose a car</h2><p class="muted" style="margin:0">Tap a reg plate above to see its ${({dates:"details",contacts:"contacts",accident:"accident help",breakdown:"breakdown help"})[state.tab]}.</p></div>`;
+    return;
+  }
   if (state.tab==="breakdown"){
     const key = "bd|"+car().id+"|"+state.accRev;
     if (v.dataset.key===key) return;
@@ -584,7 +591,7 @@ function viewSummary(){
   const cars = state.cars;
   const rows = [["mot","MOT"],["tax","Road Tax"],["insurance","Insurance"]];
   const dotColor = {ok:"var(--tl-green)",soon:"var(--tl-yellow)",warn:"var(--tl-amber)",bad:"var(--tl-red)"};
-  const cols = cars.map(c => `<button class="plate" data-car="${esc(c.id)}" aria-pressed="true"><span class="reg">${plateSVG(plate(c.reg))}</span><span class="nm"><span class="dot" style="background:${dotColor[carLevel(c)]}"></span>${esc(c.name)}</span></button>` + rows.map(([key,label]) => {
+  const cols = cars.map(c => `<button class="plate" data-car="${esc(c.id)}" aria-pressed="${c.id===state.carId}"><span class="reg">${plateSVG(plate(c.reg))}</span><span class="nm"><span class="dot" style="background:${dotColor[carLevel(c)]}"></span>${esc(c.name)}</span></button>` + rows.map(([key,label]) => {
       const it = items(c).find(i=>i.key===key), n = daysLeft(it.date), lv = level(n, it.date);
       const ins = c.insurance||{};
       const tail = n===null ? "No date yet" : n<0 ? when(n) : n===0 ? "Due today" : n+" day"+(n===1?"":"s")+" to go";
@@ -1176,7 +1183,7 @@ document.addEventListener("click", async e => {
   if (t.dataset.act==="savepdf"){ savePolicy(); return; }
   if (t.dataset.act==="editfor"){ state.carId = t.dataset.car; try{localStorage.setItem("cs.car",state.carId)}catch(_){ } sheetDate(t.dataset.key); return; }
   if (t.dataset.tab){ state.tab = t.dataset.tab; render(); window.scrollTo(0,0); return; }
-  if (t.dataset.car){ state.carId = t.dataset.car; try{localStorage.setItem("cs.car",state.carId)}catch(_){ } render(); const sc = car(); if (t.classList.contains("plate")) toast(plate(sc.reg)+" selected for Details, Costs, Contacts and Help"); return; }
+  if (t.dataset.car){ state.carId = t.dataset.car; try{localStorage.setItem("cs.car",state.carId)}catch(_){ } render(); const sc = car(); if (t.classList.contains("plate")) toast(plate(sc.reg)+" selected for Details, Contacts, Accident and Breakdown"); return; }
   if (t.dataset.range){ state.costRange = t.dataset.range; render(); return; }
   if (t.dataset.copy){ const v=t.dataset.copy; try{ await navigator.clipboard.writeText(v); toast("Copied "+v); }catch(_){ toast("Press and hold the number to copy it"); } return; }
   const a = t.dataset.act;
@@ -1230,6 +1237,7 @@ async function openSettings(){
     <button type="button" class="opt" data-act="backup"><span class="optic">⤓</span><span>Back up now<small>Last backup: ${fmtAgo(last)}${stale?" · changes since then":""}</small></span></button>
     <label class="opt" for="restoreFile"><span class="optic">⤒</span><span>Restore from backup<small>Replaces what's on this phone</small></span><input type="file" id="restoreFile" accept=".json,application/json" hidden></label>
     <button type="button" class="opt" data-act="ics"><span class="optic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span><span>Add reminders to Calendar<small>Alerts 2 months, 1 month and on the day for each MOT, tax and insurance date</small></span></button>
+    <button type="button" class="opt" data-act="wadates"><span class="optic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l1.3-3.9A8 8 0 1 1 8 19.3L4 20z"/></svg></span><span>WhatsApp reminder dates<small>Copies your dates. Paste them into the CAR_DATES secret on GitHub after you renew anything</small></span></button>
     <p class="small muted" style="margin:0">Car Status · standalone version</p>`, async()=>{});
   const s = $("#sheetSave"); if (s) s.hidden = true;
 }
@@ -1271,6 +1279,10 @@ document.addEventListener("click", async e => {
   if (a==="settings"){ openSettings(); }
   else if (a==="backup"){ try{ await CarStore.exportBackup(); toast("Backup saved"); closeSheet(); }catch(err){ if (!err || err.code!=="declined") toast("Backup didn't save. Try again."); } }
   else if (a==="ics"){ try{ await CarStore.saveFile("car-status-reminders.ics", new Blob([buildICS(state.cars)], {type:"text/calendar"})); }catch(_){} }
+  else if (a==="wadates"){
+    const txt = JSON.stringify(state.cars.map(c => ({car:c.name, reg:plate(c.reg), mot:c.mot||"", tax:c.tax||"", insurance:(c.insurance||{}).renewal||"", insurer:(c.insurance||{}).insurer||""})));
+    try{ await navigator.clipboard.writeText(txt); toast("Dates copied. Paste into CAR_DATES on GitHub"); }catch(_){ toast("Copy isn't available here"); }
+  }
   else if (a==="restoreFirst"){ $("#restoreFirst")?.click(); }
 });
 document.addEventListener("change", async e => {
